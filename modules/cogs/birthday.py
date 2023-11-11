@@ -21,14 +21,15 @@ class BirthdayCog(commands.Cog):
             if for_user:
                 if author.guild_permissions.administrator: # Check if author is an administrator in case they want to set the birthday for another user
                     LOGGER.debug(f'{author.name} used /{command_name} {date} for {for_user.name}.')
-                    if 'birthday' not in guild_data.keys():
-                        guild_data['birthday'] = dict()
-                    if for_user.id not in guild_data['birthday'].keys():
-                        guild_data['birthday'][str(for_user.id)] = dict()
-                    guild_data['birthday'][str(for_user.id)]['date'] = date
-                    if 'announcements' not in guild_data['birthday'][str(for_user.id)].keys():
-                        guild_data['birthday'][str(for_user.id)]['announcements'] = True
-                    
+                    if 'birthday' not in guild_data['features'].keys():
+                        guild_data['features']['birthday'] = dict()
+                    if 'birthdays' not in guild_data['features']['birthday'].keys():
+                        guild_data['features']['birthday']['birthdays'] = dict()
+                    if str(for_user.id) not in guild_data['features']['birthday']['birthdays'].keys():
+                        guild_data['features']['birthday'][str(for_user.id)] = dict()
+                    guild_data['features']['birthday']['birthdays'][str(for_user.id)]['date'] = date
+                    guild_data['features']['birthday']['birthdays'][str(for_user.id)]['announcements'] = True
+
                     save_guild_data(guild_id, guild_data)
                     await ctx.send_response(f'Birthday for {for_user.name} has been set to {date}.',ephemeral=True)
                 else:
@@ -37,18 +38,19 @@ class BirthdayCog(commands.Cog):
             else:
                 # Set birthday for author
                 LOGGER.debug(f'{author.name} used /{command_name} {date}.')
-                if 'birthday' not in guild_data.keys():
-                    guild_data['birthday'] = dict()
-                if author.id not in guild_data['birthday'].keys():
-                    guild_data['birthday'][str(author.id)] = dict()
-                guild_data['birthday'][str(author.id)]['date'] = date
-                if 'announcements' not in guild_data['birthday'][str(author.id)].keys():
-                    guild_data['birthday'][str(author.id)]['announcements'] = True
+                if 'birthday' not in guild_data['features'].keys():
+                    guild_data['features']['birthday'] = dict()
+                if 'birthdays' not in guild_data['features']['birthday'].keys():
+                    guild_data['features']['birthday']['birthdays'] = dict()
+                if author.id not in guild_data['features']['birthday']['birthdays'].keys():
+                    guild_data['features']['birthday']['birthdays'][str(author.id)] = dict()
+                guild_data['features']['birthday']['birthdays'][str(author.id)]['date'] = date
+                guild_data['features']['birthday']['birthdays'][str(author.id)]['announcements'] = True
                 save_guild_data(guild_id, guild_data)
                 
                 # The status defines the human readable status of the announcements to be displayed in the response.
-                announcements_status = 'are enabled' if guild_data['birthday'][str(author.id)]['announcements'] else 'aren\'t enabled'
-                await ctx.send_response(f'Your birthday has been set to {date} and announcements {announcements_status}.',ephemeral=True)
+                announcements_status = 'will be' if guild_data['features']['birthday']['birthdays'][str(author.id)]['announcements'] else 'will not be'
+                await ctx.send_response(f'{author.mention} has set their birthday to {date} and {announcements_status} announced.',ephemeral=True)
         else:
             LOGGER.debug(f'{author.name} used /set_birthday {date} but the format is not correct.')
             await ctx.send_response('The date must is DAY/MONTH format.',ephemeral=True)
@@ -65,7 +67,7 @@ class BirthdayCog(commands.Cog):
         if for_user:
             if author.guild_permissions.administrator: # Check if author is an administrator in case they want to set the birthday for another user
                 LOGGER.debug(f'{author.name} used /{command_name} {enable} for {for_user.name}.')
-                guild_data['birthday'][str(for_user.id)]['announcements'] = enable
+                guild_data['features']['birthday']['birthdays'][str(for_user.id)]['announcements'] = enable
                 save_guild_data(guild_id, guild_data)
                 await ctx.send_response(f'Announcements for {for_user.name} are set to {enable}',ephemeral=True)
             else:
@@ -73,7 +75,7 @@ class BirthdayCog(commands.Cog):
                 await ctx.send_response('You must be an administrator to run the command with "for_user".',ephemeral=True)
         else:
             LOGGER.debug(f'{author.name} used /{command_name} {enable}.')
-            guild_data['birthday'][str(author.id)]['announcements'] = enable
+            guild_data['features']['birthday']['birthdays'][str(author.id)]['announcements'] = enable
             save_guild_data(guild_id, guild_data)
             await ctx.send_response(f'Your birthday announcements have been set to {enable}',ephemeral=True)
 
@@ -87,10 +89,10 @@ class BirthdayCog(commands.Cog):
         author = ctx.author
         if author.guild_permissions.administrator:
             LOGGER.debug(f'{author.name} used /{command_name} {channel.name}.')
-            guild_data['birthday_announcements_channel'] = channel.id
+            guild_data['features']['birthday']['birthday_announcements_channel'] = channel.id
             save_guild_data(guild_id, guild_data)
-            await ctx.send_response(f'Birthday announcements will be sent to {channel.name}.',ephemeral=True)
+            await ctx.send_response(f'Birthday announcements will be sent to {channel.mention}.',ephemeral=True)
         else:
-            LOGGER.debug(f'{author.name} tried to use /{command_name} {channel.name} but is not an administrator.')
+            LOGGER.debug(f'{author.name} tried to use /{command_name} {channel.mention} but is not an administrator.')
             await ctx.send_response('You must be an administrator to run this command.',ephemeral=True)
 

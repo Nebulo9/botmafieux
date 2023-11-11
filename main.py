@@ -11,14 +11,14 @@ async def birthday_anouncements_task():
     LOGGER.debug('birthday_anouncements_task started.')
     for guild in bot.guilds:
         guild_data = get_guild_data(guild.id)
-        if 'birthday_announcements_channel' in guild_data.keys():
-            channel = guild.get_channel(guild_data['birthday_announcements_channel'])
-            if 'birthday' in guild_data.keys():
-                for user_id in guild_data['birthday'].keys():
-                    user = bot.get_user(int(user_id))
+        if 'birthday_announcements_channel' in guild_data['features']['birthday'].keys():
+            channel = guild.get_channel(guild_data['features']['birthday']['birthday_announcements_channel'])
+            if 'birthdays' in guild_data.keys():
+                for user_id in guild_data['features']['birthday']['birthdays'].keys():
+                    user = guild.get_member(int(user_id))
                     if user:
-                        if guild_data['birthday'][user_id]['announcements']:
-                            date = guild_data['birthday'][user_id]['date']
+                        if guild_data['features']['birthday']['birthdays'][user_id]['announcements']:
+                            date = guild_data['features']['birthday']['birthdays'][user_id]['date']
                             today = datetime.today().strftime('%d/%m')
                             if date == today:
                                 await channel.send(f'Joyeux anniversaire {user.mention}!')
@@ -26,12 +26,16 @@ async def birthday_anouncements_task():
             LOGGER.debug(f'No birthday_announcements_channel set for guild {guild.name} ({guild.id}).')
     LOGGER.debug('birthday_anouncements_task ended.')
 
-@bot.slash_command(name='help',description='Displays this message.')
+@bot.slash_command(name='help',description='Displays the help message.')
 async def help(ctx:discord.ApplicationContext):
     """Displays this message."""
     command_name = 'help'
     LOGGER.debug(f'{ctx.author.name} used /{command_name}.')
-    await ctx.send_response('test',ephemeral=True)
+    embed = discord.Embed(title='Help',description='List of commands and their descriptions.',color=discord.Color.from_rgb(171,0,219))
+    embed.set_author(name=bot.user.name,icon_url=bot.user.avatar.url)
+    for command in bot.commands:
+        embed.add_field(name=command.name,value=command.description,inline=False)
+    await ctx.send_response(embed=embed,ephemeral=True)
 
 @bot.event
 async def on_guild_join(guild:discord.Guild):
@@ -61,7 +65,7 @@ async def on_ready():
         if not os.path.exists(path):
             LOGGER.info(f'Creating data file for guild {guild_id}')
             with open(path, 'x') as f:
-                json.dump({}, f, indent=2)
+                json.dump({'features': {}}, f, indent=2)
     birthday_anouncements_task.start()
 
 if __name__ == '__main__':
