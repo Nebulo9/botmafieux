@@ -77,7 +77,7 @@ async def on_guild_remove(guild:discord.Guild):
 async def on_ready():
     LOGGER.info(f'{bot.user.name} has connected to Discord!')
     LOGGER.debug(f'Guilds: {bot.guilds}')
-    if EXEC_ARGS.guild_id and EXEC_ARGS.channel_id:
+    if EXEC_ARGS.reload and EXEC_ARGS.guild_id and EXEC_ARGS.channel_id:
         guild = bot.get_guild(EXEC_ARGS.guild_id)
         channel = guild.get_channel_or_thread(EXEC_ARGS.channel_id)
         await channel.send(f'{bot.user.name} Bot reloaded!',silent=True)
@@ -92,7 +92,6 @@ async def on_ready():
     birthday_anouncements_task.start()
 
 if __name__ == '__main__':
-    LOGGER.debug(f'ARGS: {EXEC_ARGS}')
     load_dotenv()
     TOKEN = os.getenv('TOKEN')
     bot.run(TOKEN)
