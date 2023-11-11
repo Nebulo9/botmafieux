@@ -1,10 +1,17 @@
-import os, discord, json
+import os, discord, json, sys
+from argparse import ArgumentParser
 from datetime import datetime
 from dotenv import load_dotenv
-from discord.ext import tasks
+from discord.ext import tasks, commands
 from modules.setup.bot import bot
 from modules.setup.logger import LOGGER
 from modules.setup.data import DATA_DIR, get_guild_data
+
+PARSER = ArgumentParser(description='BotMafieux for Discord.')
+PARSER.add_argument('--guild_id',type=int,help='The guild ID.')
+PARSER.add_argument('--channel_id',type=int,help='The channel ID.')
+PARSER.add_argument('-r','--reload',action='store_true',help='Reload the bot.')
+EXEC_ARGS = PARSER.parse_args()
 
 @tasks.loop(time=datetime.time(datetime.strptime('00:00','%H:%M')))
 async def birthday_anouncements_task():
@@ -37,6 +44,18 @@ async def help(ctx:discord.ApplicationContext):
         embed.add_field(name=command.name,value=command.description,inline=False)
     await ctx.send_response(embed=embed,ephemeral=True)
 
+@bot.slash_command(name='reload',description='Reloads the bot.')
+@commands.is_owner()
+async def reload(ctx:discord.ApplicationContext):
+    """Reloads the bot."""
+    command_name = 'reload'
+    guild = ctx.guild
+    channel = ctx.channel
+    LOGGER.debug(f'{ctx.author.name} used /{command_name}.')
+    await ctx.send_response('Reloading...',ephemeral=True)
+    args = [f'--guild_id={guild.id}',f'--channel_id={channel.id}','--reload']
+    os.execl(sys.executable, sys.executable, __file__, *args)
+
 @bot.event
 async def on_guild_join(guild:discord.Guild):
     LOGGER.info(f'Bot joined guild {guild.name} ({guild.id}).')
@@ -58,6 +77,10 @@ async def on_guild_remove(guild:discord.Guild):
 async def on_ready():
     LOGGER.info(f'{bot.user.name} has connected to Discord!')
     LOGGER.debug(f'Guilds: {bot.guilds}')
+    if EXEC_ARGS.guild_id and EXEC_ARGS.channel_id:
+        guild = bot.get_guild(EXEC_ARGS.guild_id)
+        channel = guild.get_channel_or_thread(EXEC_ARGS.channel_id)
+        await channel.send(f'{bot.user.name} Bot reloaded!',silent=True)
     # Creates guild data files if they don't exist
     for guild in bot.guilds:
         guild_id = guild.id
@@ -69,6 +92,7 @@ async def on_ready():
     birthday_anouncements_task.start()
 
 if __name__ == '__main__':
+    LOGGER.debug(f'ARGS: {EXEC_ARGS}')
     load_dotenv()
     TOKEN = os.getenv('TOKEN')
     bot.run(TOKEN)
