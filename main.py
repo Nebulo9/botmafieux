@@ -1,11 +1,14 @@
 import os, discord, json, sys
 from argparse import ArgumentParser
 from datetime import datetime
+from asyncio import create_task
 from dotenv import load_dotenv
+from discord import option
 from discord.ext import tasks, commands
-from modules.setup.bot import bot
+from modules.setup.bot import bot, reload_feature
 from modules.setup.logger import LOGGER
-from modules.setup.data import DATA_DIR, get_guild_data
+from modules.setup.data import get_guild_data, create_guild_data, delete_guild_data, save_guild_data
+from modules.cogs.productivity import TASKS as PRODUCTIVITY_TASKS, send_reminder
 
 PARSER = ArgumentParser(description='BotMafieux for Discord.')
 PARSER.add_argument('--guild_id',type=int,help='The guild ID.')
@@ -45,33 +48,35 @@ async def help(ctx:discord.ApplicationContext):
     await ctx.send_response(embed=embed,ephemeral=True)
 
 @bot.slash_command(name='reload',description='Reloads the bot.')
+@option(name='feature',description='The feature to reload.',required=True,choices=['birthday','productivity'])
 @commands.is_owner()
-async def reload(ctx:discord.ApplicationContext):
+async def reload(ctx:discord.ApplicationContext, feature:str):
     """Reloads the bot."""
     command_name = 'reload'
     guild = ctx.guild
     channel = ctx.channel
-    LOGGER.debug(f'{ctx.author.name} used /{command_name}.')
-    await ctx.send_response('Reloading...',ephemeral=True)
-    args = [f'--guild_id={guild.id}',f'--channel_id={channel.id}','--reload']
-    os.execl(sys.executable, sys.executable, __file__, *args)
+    LOGGER.debug(f'{ctx.author.name} used /{command_name} {feature}.')
+    try:
+        reload_feature(feature)
+        await ctx.send_response(f'{feature} reloaded!',ephemeral=True)
+    except Exception as e:
+        LOGGER.error(f'Error reloading feature {feature}: {e}')
+        await ctx.send_response(f'Error reloading feature {feature}: {e}',ephemeral=True)
+
 
 @bot.event
 async def on_guild_join(guild:discord.Guild):
-    LOGGER.info(f'Bot joined guild {guild.name} ({guild.id}).')
-    path = os.path.join(DATA_DIR, f'{guild.id}.json')
-    if not os.path.exists(path):
-        LOGGER.info(f'Creating data file for guild {guild.id}')
-        with open(path, 'x') as f:
-            json.dump({}, f, indent=2)
+    guild_id = guild.id
+    guild_name = guild.name
+    LOGGER.info(f'Bot joined guild {guild_name} ({guild_id}).')
+    create_guild_data(guild_id)
 
 @bot.event
 async def on_guild_remove(guild:discord.Guild):
-    LOGGER.info(f'Bot left guild {guild.name} ({guild.id}).')
-    path = os.path.join(DATA_DIR, f'{guild.id}.json')
-    if os.path.exists(path):
-        LOGGER.info(f'Deleting data file for guild {guild.id}.')
-        os.remove(path)
+    guild_id = guild.id
+    guild_name = guild.name
+    LOGGER.info(f'Bot left guild {guild_name} ({guild_id}).')
+    delete_guild_data(guild_id)
 
 @bot.event
 async def on_ready():
@@ -81,15 +86,29 @@ async def on_ready():
         guild = bot.get_guild(EXEC_ARGS.guild_id)
         channel = guild.get_channel_or_thread(EXEC_ARGS.channel_id)
         await channel.send(f'{bot.user.name} Bot reloaded!',silent=True)
-    # Creates guild data files if they don't exist
-    for guild in bot.guilds:
-        guild_id = guild.id
-        path = os.path.join(DATA_DIR, f'{guild_id}.json')
-        if not os.path.exists(path):
-            LOGGER.info(f'Creating data file for guild {guild_id}')
-            with open(path, 'x') as f:
-                json.dump({'features': {}}, f, indent=2)
     birthday_anouncements_task.start()
+    for guild in bot.guilds:
+        guild_data = get_guild_data(guild.id)
+        if 'features' in guild_data.keys():
+            if 'productivity' in guild_data['features'].keys():
+                if 'reminders' in guild_data['features']['productivity'].keys():
+                    for user_id in guild_data['features']['productivity']['reminders'].keys():
+                        user_data = guild_data['features']['productivity']['reminders'][user_id]
+                        if user_data['enabled']:
+                            next_reminder = user_data['next_reminder']
+                            if next_reminder > datetime.now().timestamp():
+                                cooldown = next_reminder - datetime.now().timestamp()
+                                user = guild.get_member(int(user_id))
+                                channel = guild.get_channel(user_data['channel'])
+                                custom_message = user_data['custom_message']
+                                PRODUCTIVITY_TASKS[user_id] = create_task(send_reminder(cooldown,user,channel,custom_message))
+                            else:
+                                user_data['next_reminder'] = datetime.now().timestamp() + user_data['cooldown']
+                                save_guild_data(guild.id, guild_data)
+                                user = guild.get_member(int(user_id))
+                                channel = guild.get_channel(user_data['channel'])
+                                custom_message = user_data['custom_message']
+                                PRODUCTIVITY_TASKS[user_id] = create_task(send_reminder(user_data['cooldown'],user,channel,custom_message))
 
 if __name__ == '__main__':
     load_dotenv()
