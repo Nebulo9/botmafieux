@@ -1,4 +1,5 @@
-import os, discord, json, sys
+import os, discord, json, sys, random
+import modules.setup.db as db
 from argparse import ArgumentParser
 from datetime import datetime
 from asyncio import create_task
@@ -20,20 +21,36 @@ EXEC_ARGS = PARSER.parse_args()
 async def birthday_anouncements_task():
     LOGGER.debug('birthday_anouncements_task started.')
     for guild in bot.guilds:
-        guild_data = get_guild_data(guild.id)
-        if 'birthday_announcements_channel' in guild_data['features']['birthday'].keys():
-            channel = guild.get_channel(guild_data['features']['birthday']['birthday_announcements_channel'])
-            if 'birthdays' in guild_data.keys():
-                for user_id in guild_data['features']['birthday']['birthdays'].keys():
-                    user = guild.get_member(int(user_id))
-                    if user:
-                        if guild_data['features']['birthday']['birthdays'][user_id]['announcements']:
-                            date = guild_data['features']['birthday']['birthdays'][user_id]['date']
-                            today = datetime.today().strftime('%d/%m')
-                            if date == today:
-                                await channel.send(f'Joyeux anniversaire {user.mention}!')
+        birthday_settings = db.select('birthday_settings',f'guild_id = {guild.id}')
+        if birthday_settings:
+            if birthday_settings['is_enabled']:
+                for user in guild.members:
+                    user_productivity_data = db.select('guild_user_productivity',f'user_id = {user.id} AND guild_id = {guild.id}')
+                    if user_productivity_data:
+                        if user_productivity_data['is_enabled']:
+                            user = guild.get_member(user.id)
+                            if user:
+                                birthday = user_productivity_data['birthday']
+                                today = datetime.today().strftime('%d/%m')
+                                if birthday == today:
+                                    channel = guild.get_channel(user_productivity_data['channel_id'])
+                                    if channel:
+                                        message = user_productivity_data['birthday_message']
+                                        if message:
+                                            message = message.replace('{user}',user.mention)
+                                            await channel.send(message)
+                                    else:
+                                        LOGGER.debug(f'Channel {user_productivity_data["channel_id"]} not found.')
+                                else:
+                                    LOGGER.debug(f'No birthday today for user {user.name} ({user.id}).')
+                            else:
+                                LOGGER.debug(f'User {user.name} ({user.id}) not found.')
+                        else:
+                            LOGGER.debug(f'User {user.name} ({user.id}) has birthday announcements disabled.')
+                    else:
+                        LOGGER.debug(f'No birthday data found for user {user.name} ({user.id}).')
         else:
-            LOGGER.debug(f'No birthday_announcements_channel set for guild {guild.name} ({guild.id}).')
+            LOGGER.debug(f'No productivity settings found for guild {guild.name} ({guild.id}).')
     LOGGER.debug('birthday_anouncements_task ended.')
 
 @bot.slash_command(name='help',description='Displays the help message.')
@@ -63,20 +80,42 @@ async def reload(ctx:discord.ApplicationContext, feature:str):
         LOGGER.error(f'Error reloading feature {feature}: {e}')
         await ctx.send_response(f'Error reloading feature {feature}: {e}',ephemeral=True)
 
+@bot.event
+async def on_member_join(member:discord.Member):
+    if not member.bot:
+        user_id = member.id
+        user_name = member.name
+        user_mention = member.mention
+        db_user = db.select('global_user',f'WHERE user_id = {user_id}')
+        if not db_user:
+            db.insert('global_user',user_id=user_id,user_name=user_name,user_mention=user_mention)
+
+@bot.event
+async def on_raw_member_remove(payload:discord.RawMemberRemoveEvent):
+    user = payload.user
+    if not user.bot:
+        user_id = user.id
+        guild_id = payload.guild_id
+        db.delete('guild_user_birthday',f'user_id = {user_id} AND guild_id = {guild_id}')
+        db.delete('guild_user_productivity',f'user_id = {user_id} AND guild_id = {guild_id}')
 
 @bot.event
 async def on_guild_join(guild:discord.Guild):
     guild_id = guild.id
     guild_name = guild.name
     LOGGER.info(f'Bot joined guild {guild_name} ({guild_id}).')
-    create_guild_data(guild_id)
+    db.insert('guild',guild_id=guild_id)
+    db.insert('birthday_settings',guild_id=guild_id,is_enabled=False,channel_id=random.choice(guild.text_channels).id)
+    db.insert('productivity_settings',guild_id=guild_id,is_enabled=False)
 
 @bot.event
 async def on_guild_remove(guild:discord.Guild):
     guild_id = guild.id
     guild_name = guild.name
     LOGGER.info(f'Bot left guild {guild_name} ({guild_id}).')
-    delete_guild_data(guild_id)
+    db.delete('birthday_settings',f'guild_id = {guild_id}')
+    db.delete('productivity_settings',f'guild_id = {guild_id}')
+    db.delete('guild',f'guild_id = {guild_id}')
 
 @bot.event
 async def on_ready():
@@ -88,30 +127,41 @@ async def on_ready():
         await channel.send(f'{bot.user.name} Bot reloaded!',silent=True)
     birthday_anouncements_task.start()
     for guild in bot.guilds:
-        guild_data = get_guild_data(guild.id)
-        if 'features' in guild_data.keys():
-            if 'productivity' in guild_data['features'].keys():
-                if 'reminders' in guild_data['features']['productivity'].keys():
-                    for user_id in guild_data['features']['productivity']['reminders'].keys():
-                        user_data = guild_data['features']['productivity']['reminders'][user_id]
-                        if user_data['enabled']:
-                            next_reminder = user_data['next_reminder']
+        for user in guild.members:
+            user_id = user.id
+            db_user = db.select('global_user',f'user_id = {user_id}')
+            if not db_user:
+                db.insert('global_user',user_id=user_id,user_name=user.name,user_mention=user.mention)
+
+        productivity_settings = db.select('productivity_settings',f'guild_id = {guild.id}')
+        if productivity_settings:
+            if productivity_settings['is_enabled']:
+                for user in guild.members:
+                    user_productivity_data = db.select('guild_user_productivity',f'user_id = {user.id} AND guild_id = {guild.id}')
+                    if user_productivity_data:
+                        if user_productivity_data['is_enabled']:
+                            next_reminder = user_productivity_data['next_reminder']
                             if next_reminder > datetime.now().timestamp():
                                 cooldown = next_reminder - datetime.now().timestamp()
-                                user = guild.get_member(int(user_id))
-                                channel = guild.get_channel(user_data['channel'])
-                                custom_message = user_data['custom_message']
-                                PRODUCTIVITY_TASKS[user_id] = create_task(send_reminder(cooldown,user,channel,custom_message))
+                                channel = guild.get_channel(user_productivity_data['channel_id'])
+                                reminder_message = user_productivity_data['reminder_message']
+                                PRODUCTIVITY_TASKS[str(user.id)] = create_task(send_reminder(cooldown,user,channel,reminder_message))
                             else:
-                                user_data['next_reminder'] = datetime.now().timestamp() + user_data['cooldown']
-                                save_guild_data(guild.id, guild_data)
-                                user = guild.get_member(int(user_id))
-                                channel = guild.get_channel(user_data['channel'])
-                                custom_message = user_data['custom_message']
-                                PRODUCTIVITY_TASKS[user_id] = create_task(send_reminder(user_data['cooldown'],user,channel,custom_message))
+                                user_productivity_data['next_reminder'] = datetime.now().timestamp() + user_productivity_data['cooldown']
+                                db.update('guild_user_productivity',f'user_id = {user.id} AND guild_id = {guild.id}',next_reminder=user_productivity_data['next_reminder'])
+                                channel = guild.get_channel(user_productivity_data['channel_id'])
+                                reminder_message = user_productivity_data['reminder_message']
+                                PRODUCTIVITY_TASKS[str(user.id)] = create_task(send_reminder(user_productivity_data['cooldown'],user,channel,reminder_message))
+        else:
+            LOGGER.debug(f'No productivity settings found for guild {guild.name} ({guild.id}).')
 
 if __name__ == '__main__':
-    load_dotenv()
-    TOKEN = os.getenv('TOKEN')
-    bot.run(TOKEN)
+    db.check_conn()
+    result = db.select('token','token_name = \'discord\'','token_value')
+    if result:
+        TOKEN = result['token_value']
+        bot.run(TOKEN)
+    else:
+        LOGGER.error('No token found.')
+        sys.exit(1)
     
