@@ -6,7 +6,6 @@ from typing import Union, Optional
 from asyncio import sleep, create_task
 from ..setup.logger import LOGGER
 from ..setup import db
-from ..setup.data import get_guild_data, save_guild_data, is_feature_enabled
 
 TASKS = {}
 

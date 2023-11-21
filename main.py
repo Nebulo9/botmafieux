@@ -8,7 +8,6 @@ from discord import option
 from discord.ext import tasks, commands
 from modules.setup.bot import bot, reload_feature
 from modules.setup.logger import LOGGER
-from modules.setup.data import get_guild_data, create_guild_data, delete_guild_data, save_guild_data
 from modules.cogs.productivity import TASKS as PRODUCTIVITY_TASKS, send_reminder
 
 PARSER = ArgumentParser(description='BotMafieux for Discord.')

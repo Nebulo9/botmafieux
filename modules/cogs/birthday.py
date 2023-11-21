@@ -3,7 +3,6 @@ from discord import option
 from discord.ext import commands
 from datetime import datetime
 from ..setup.logger import LOGGER
-from ..setup.data import get_guild_data, save_guild_data, is_feature_enabled
 from ..setup import db
 
 class BirthdayCog(commands.Cog):
