@@ -19,8 +19,8 @@ La fonctionnalité peut être configurée par un administrateur avec la commande
 
 | Commande | Description | Options requises | Options facultatives |
 | --- | --- | --- | --- |
-| help | Afficher la description des commandes | | |
-| `birthday_set` | Paramétrer son anniversaire | `date`: date d'anniversaire au format `JJ/MM`<br>`announcements`: activation/désactivation des annonces d'anniversaire | `message`: message personnalisé à envoyer à minuit le jour J<br>`for_user`: utilisateur à paramétrer (administrateurs uniquement) |
+| `help` | Afficher la description des commandes | | |
+| `birthday_set` | Paramétrer son anniversaire | `date`: date d'anniversaire au format "*JJ/MM*"<br>`announcements`: activation/désactivation des annonces d'anniversaire | `message`: message personnalisé à envoyer à minuit le jour J<br>`for_user`: utilisateur à paramétrer (administrateurs uniquement) |
 | `productivity_set` | Paramétrer ses rappels de productivité | `days`: nombre de jours entre chaque rappel<br>`channel`: salon dans lequel envoyer les rappels<br>`enable`: activation/désactivation des rappels de productivité | `message`: message à envoyer<br>`for_user`: utilisateur à paramétrer (administrateurs uniquement) |
 
 ### Commandes administrateurs
